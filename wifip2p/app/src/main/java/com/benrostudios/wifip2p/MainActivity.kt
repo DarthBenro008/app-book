@@ -10,7 +10,10 @@ import android.net.wifi.p2p.WifiP2pManager
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.util.Log
+import androidx.recyclerview.widget.LinearLayoutManager
+import com.benrostudios.wifip2p.adapters.withSimpleAdapter
 import kotlinx.android.synthetic.main.activity_main.*
+import kotlinx.android.synthetic.main.peer_item.view.*
 
 class MainActivity : AppCompatActivity() {
 
@@ -29,6 +32,7 @@ class MainActivity : AppCompatActivity() {
         addAction(WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION)
         addAction(WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION)
     }
+    val p2pList: WifiP2pManager.PeerListListener? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,17 +41,23 @@ class MainActivity : AppCompatActivity() {
         channel?.also { channel ->
             receiver = WiFiDirectBroadcastReceiver(manager!!, channel, this)
         }
+
         button.setOnClickListener {
             manager?.discoverPeers(channel, object : WifiP2pManager.ActionListener {
 
                 override fun onSuccess() {
                     Log.d(TAG,"Found Peers!")
+                    manager?.requestPeers(channel) {
+                        Log.d(TAG,it.toString())
+                        inflatePeers(it)
+                    }
                 }
 
                 override fun onFailure(reasonCode: Int) {
                     Log.d(TAG,"Didn't Find any peers!")
                 }
             })
+
 
         }
 
@@ -83,5 +93,16 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             )}
+    }
+
+    fun inflatePeers(data: WifiP2pDeviceList){
+        recyclerView.layoutManager = LinearLayoutManager(this)
+        Log.d(TAG,"Found Peers? ${data.deviceList.toMutableList()}")
+        recyclerView.withSimpleAdapter(data.deviceList.toMutableList(),R.layout.peer_item){dataDevice ->
+            itemView.peer_displayName.text = dataDevice.deviceName
+            itemView.peer_item_constraint.setOnClickListener {
+                connectToPeer(dataDevice)
+            }
+        }
     }
 }
