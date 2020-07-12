@@ -38,4 +38,14 @@
         app:layout_constraintBottom_toTopOf="@+id/send_button"
         app:layout_constraintEnd_toEndOf="@+id/send_button"
         app:layout_constraintStart_toStartOf="@+id/send_button" />
+
+    <Button
+        android:id="@+id/pic_sender"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="sendPic"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="@+id/recieve_button"
+        app:layout_constraintStart_toStartOf="@+id/recieve_button"
+        app:layout_constraintTop_toBottomOf="@+id/recieve_button" />
 </androidx.constraintlayout.widget.ConstraintLayout>

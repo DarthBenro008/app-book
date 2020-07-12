@@ -20,6 +20,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var uri: Uri
     private var imageName: String? = null
     private var uriString: String? = null
+    private var connectionsClient: ConnectionsClient? = null
+    private lateinit var opponentEndpointId: String
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -32,6 +34,11 @@ class MainActivity : AppCompatActivity() {
         recieve_button.setOnClickListener {
             discover()
         }
+
+        pic_sender.setOnClickListener {
+            sendPic()
+        }
+        connectionsClient = Nearby.getConnectionsClient(this)
 
     }
 
@@ -104,9 +111,7 @@ class MainActivity : AppCompatActivity() {
         override fun onConnectionInitiated(endpointId: String, connectionInfo: ConnectionInfo) {
             // Automatically accept the connection on both sides.
             Nearby.getConnectionsClient(application).acceptConnection(endpointId, ReceiveBytesPayloadListener())
-            val pfd = contentResolver.openFileDescriptor(uri, "r")
-            val filePayload = Payload.fromFile(pfd!!)
-            Nearby.getConnectionsClient(applicationContext).sendPayload(endpointId, filePayload)
+            opponentEndpointId = endpointId
         }
 
         override fun onConnectionResult(endpointId: String, result: ConnectionResolution) {
@@ -114,7 +119,8 @@ class MainActivity : AppCompatActivity() {
                 ConnectionsStatusCodes.STATUS_OK -> {
                     Log.d(TAG,"STATUS OK")
                     conn_status.text = "STATUS OK"
-                    Nearby.getConnectionsClient(applicationContext).stopAdvertising()
+                    connectionsClient?.stopAdvertising()
+                    connectionsClient?.stopDiscovery()
                 }
                 ConnectionsStatusCodes.STATUS_CONNECTION_REJECTED -> {
                     Log.d(TAG,"STATUS rejected")
@@ -192,5 +198,11 @@ class MainActivity : AppCompatActivity() {
             if(imageName.isNullOrEmpty())
                 Toast.makeText(this, "No file chosen", Toast.LENGTH_LONG).show()
         }
+    }
+
+    private fun sendPic(){
+        val pfd = contentResolver.openFileDescriptor(uri, "r")
+        val filePayload = Payload.fromFile(pfd!!)
+        connectionsClient?.sendPayload(opponentEndpointId, filePayload)
     }
 }
