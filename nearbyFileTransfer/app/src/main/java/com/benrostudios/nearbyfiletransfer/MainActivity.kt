@@ -3,10 +3,8 @@ package com.benrostudios.nearbyfiletransfer
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
-import android.database.Cursor
 import android.net.Uri
 import android.os.Bundle
-import android.provider.OpenableColumns
 import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -14,6 +12,8 @@ import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.*
 import kotlinx.android.synthetic.main.activity_main.*
 import java.io.File
+import java.io.FileNotFoundException
+import java.nio.charset.StandardCharsets
 
 
 class MainActivity : AppCompatActivity() {
@@ -23,12 +23,14 @@ class MainActivity : AppCompatActivity() {
     private var connectionsClient: ConnectionsClient? = null
     private lateinit var opponentEndpointId: String
 
+
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         send_button.setOnClickListener {
-            getImage()
+            advertise()
         }
 
         recieve_button.setOnClickListener {
@@ -36,7 +38,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         pic_sender.setOnClickListener {
-            sendPic()
+            showImageChooser(opponentEndpointId)
         }
         connectionsClient = Nearby.getConnectionsClient(this)
 
@@ -45,6 +47,8 @@ class MainActivity : AppCompatActivity() {
     companion object {
         const val TAG = "Main"
         const val PICK_IMG_CODE = 3
+        const val READ_REQUEST_CODE = 42
+        const val ENDPOINT_ID_EXTRA = "com.benrostudios.nearbyfiletransfer.fileEndpointID"
     }
 
     fun advertise() {
@@ -110,7 +114,7 @@ class MainActivity : AppCompatActivity() {
     private val connectionLifecycleCallback: ConnectionLifecycleCallback = object : ConnectionLifecycleCallback() {
         override fun onConnectionInitiated(endpointId: String, connectionInfo: ConnectionInfo) {
             // Automatically accept the connection on both sides.
-            Nearby.getConnectionsClient(application).acceptConnection(endpointId, ReceiveBytesPayloadListener())
+            Nearby.getConnectionsClient(application).acceptConnection(endpointId, ReceiveWithProgressCallback(applicationContext))
             opponentEndpointId = endpointId
         }
 
@@ -144,65 +148,47 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    internal class ReceiveBytesPayloadListener : PayloadCallback() {
-        override fun onPayloadReceived(endpointId: String, payload: Payload) {
-            val payloadFile: File? = payload.asFile()?.asJavaFile()
-            payloadFile?.renameTo(File(payloadFile.parentFile, "tp.jpeg"))
-        }
-
-        override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {
-            // Bytes payloads are sent as a single chunk, so you'll receive a SUCCESS update immediately
-            // after the call to onPayloadReceived().
-            if(update.status == PayloadTransferUpdate.Status.SUCCESS){
-                Log.d(TAG,"Success Transfer!!")
-            }
-        }
-    }
 
 
-    @SuppressLint("ObsoleteSdkInt")
-    private fun getImage() {
-        val intent = Intent()
-        intent.type = "image/jpeg"
-        intent.action = Intent.ACTION_GET_CONTENT
-        startActivityForResult(Intent.createChooser(intent, "Select Profile Picture"), Companion.PICK_IMG_CODE)
-    }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == PICK_IMG_CODE && resultCode == Activity.RESULT_OK && data != null && data.data != null) {
-            if (data.data != null) {
-                uri = data.data!!
-                uriString = uri.toString()
-                val myFile = File(uriString!!)
-                imageName = null
+        if (requestCode == READ_REQUEST_CODE && resultCode == Activity.RESULT_OK && data != null
+        ) {
+            val endpointId: String? = data.getStringExtra(ENDPOINT_ID_EXTRA)
 
-                if (uriString!!.startsWith("content://")) {
-                    var cursor: Cursor? = null
-                    try {
-                        cursor = this.contentResolver?.query(uri, null, null, null, null)
-                        if (cursor != null && cursor.moveToFirst()) {
-                            imageName = cursor.getString(cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME))
-                        }
-                    } finally {
-                        cursor?.close();
-                    }
-                }
-                else if (uriString!!.startsWith("file://")) {
-                    imageName = myFile.name;
-                }
+            // The URI of the file selected by the user.
+            val uri: Uri? = data.data
+            val filePayload: Payload
+            filePayload = try {
+                // Open the ParcelFileDescriptor for this URI with read access.
+                val pfd = contentResolver.openFileDescriptor(uri!!, "r")
+                Payload.fromFile(pfd!!)
+            } catch (e: FileNotFoundException) {
+                Log.e("MyApp", "File not found", e)
+                return
             }
-            advertise()
-        }
-        else {
-            if(imageName.isNullOrEmpty())
-                Toast.makeText(this, "No file chosen", Toast.LENGTH_LONG).show()
+
+            // Construct a simple message mapping the ID of the file payload to the desired filename.
+            val filenameMessage =
+                filePayload.id.toString() + ":" + uri.lastPathSegment
+
+            // Send the filename message as a bytes payload.
+            val filenameBytesPayload =
+                Payload.fromBytes(filenameMessage.toByteArray(StandardCharsets.UTF_8))
+            connectionsClient?.sendPayload(opponentEndpointId, filenameBytesPayload)
+
+            // Finally, send the file payload.
+            connectionsClient?.sendPayload(opponentEndpointId, filePayload)
+            ReceiveWithProgressCallback(applicationContext).sendPayload(opponentEndpointId,filePayload)
         }
     }
 
-    private fun sendPic(){
-        val pfd = contentResolver.openFileDescriptor(uri, "r")
-        val filePayload = Payload.fromFile(pfd!!)
-        connectionsClient?.sendPayload(opponentEndpointId, filePayload)
+    private fun showImageChooser(endpointId: String) {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+        intent.addCategory(Intent.CATEGORY_OPENABLE)
+        intent.type = "image/*"
+        intent.putExtra(ENDPOINT_ID_EXTRA, endpointId)
+        startActivityForResult(intent, READ_REQUEST_CODE)
     }
 }
