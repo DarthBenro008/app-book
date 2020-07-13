@@ -64,17 +64,18 @@ class ReceiveWithProgressCallback(private val context: Context) : PayloadCallbac
         isIncoming: Boolean
     ): NotificationCompat.Builder {
         notificationManager.createNotificationChannel(chan1)
-        val notification = NotificationCompat.Builder(context, "channel7")
+        val notification = NotificationCompat.Builder(context, "deafault")
             .setContentTitle(if (isIncoming) "Receiving..." else "Sending...")
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-
+            .setContentText("Transferring your files")
+            .setChannelId("deafault")
         var indeterminate = false
         if (payload.type == Payload.Type.STREAM) {
             // We can only show indeterminate progress for stream payloads.
             indeterminate = true
         }
-        notification.setProgress(100, 0, indeterminate)
+        notification.setProgress(100, 0, true)
         return notification
     }
 
