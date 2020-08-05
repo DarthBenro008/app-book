@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets
 
 
 class ReceiveWithProgressCallback(private val context: Context) : PayloadCallback() {
+    private var notificationIsIncoming = false
     private val incomingPayloads =
         SimpleArrayMap<Long, NotificationCompat.Builder>()
     private val outgoingPayloads =
@@ -31,6 +32,7 @@ class ReceiveWithProgressCallback(private val context: Context) : PayloadCallbac
         SimpleArrayMap<Long, Payload?>()
     private val filePayloadFilenames =
         SimpleArrayMap<Long, String>()
+    private lateinit var currentExtension: String
 
     private var notificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -42,7 +44,7 @@ class ReceiveWithProgressCallback(private val context: Context) : PayloadCallbac
     )
 
 
-    fun sendPayload(endpointId: String, payload: Payload) {
+    fun sendPayload(payload: Payload) {
         if (payload.type == Payload.Type.BYTES) {
             // No need to track progress for bytes.
             return
@@ -63,6 +65,7 @@ class ReceiveWithProgressCallback(private val context: Context) : PayloadCallbac
         payload: Payload,
         isIncoming: Boolean
     ): NotificationCompat.Builder {
+        notificationIsIncoming = isIncoming
         notificationManager.createNotificationChannel(chan1)
         val notification = NotificationCompat.Builder(context, "deafault")
             .setContentTitle(if (isIncoming) "Receiving..." else "Sending...")
@@ -75,7 +78,7 @@ class ReceiveWithProgressCallback(private val context: Context) : PayloadCallbac
             // We can only show indeterminate progress for stream payloads.
             indeterminate = true
         }
-        notification.setProgress(100, 0, true)
+        notification.setProgress(100, 0, indeterminate)
         return notification
     }
 
@@ -137,16 +140,22 @@ class ReceiveWithProgressCallback(private val context: Context) : PayloadCallbac
                 notification.setProgress(100, percentTransferred,  /* indeterminate= */false)
             }
             PayloadTransferUpdate.Status.SUCCESS -> {
-                val payloadId2 = update.payloadId
-                val payload = incomingFilePayloads.remove(payloadId2)
-                completedFilePayloads.put(payloadId2, payload)
-                if (payload?.type == Payload.Type.FILE) {
-                    processFilePayload(payloadId2)
-                    Log.d("Reciever", "Going to Processing File")
+                if(notificationIsIncoming){
+                    val payloadId2 = update.payloadId
+                    val payload = incomingFilePayloads.remove(payloadId2)
+                    completedFilePayloads.put(payloadId2, payload)
+                    if (payload?.type == Payload.Type.FILE) {
+                        processFilePayload(payloadId2)
+                        Log.d("Reciever", "Going to Processing File")
+                    }
+                    notification
+                        .setProgress(100, 100,  /* indeterminate= */false)
+                        .setContentText("Transfer complete!");
+                }else{
+                    notification
+                        .setProgress(100, 100,  /* indeterminate= */false)
+                        .setContentText("Transfer complete!");
                 }
-                notification
-                    .setProgress(100, 100,  /* indeterminate= */false)
-                    .setContentText("Transfer complete!");
             }
             PayloadTransferUpdate.Status.FAILURE, PayloadTransferUpdate.Status.CANCELED -> notification.setProgress(
                 0,
@@ -167,7 +176,7 @@ class ReceiveWithProgressCallback(private val context: Context) : PayloadCallbac
             filePayloadFilenames.remove(payloadId)
             val payloadFile: File? = filePayload.asFile()!!.asJavaFile()
             // Rename the file.
-            payloadFile?.renameTo(File(payloadFile.parentFile, "$filename.jpeg"))
+            payloadFile?.renameTo(File(payloadFile.parentFile, "$filename.$currentExtension"))
             Log.d("Recieevr", "Done")
         }
     }
@@ -178,6 +187,7 @@ class ReceiveWithProgressCallback(private val context: Context) : PayloadCallbac
         val payloadId = parts[0].toLong()
         val filename = parts[1]
         filePayloadFilenames.put(payloadId, filename)
+        currentExtension = parts[2]
         return payloadId
     }
 

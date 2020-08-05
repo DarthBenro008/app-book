@@ -1,13 +1,12 @@
 package com.benrostudios.nearbyfiletransfer
 
-import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.net.toFile
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.*
 import kotlinx.android.synthetic.main.activity_main.*
@@ -93,6 +92,7 @@ class MainActivity : AppCompatActivity() {
     private val endpointDiscoveryCallback: EndpointDiscoveryCallback = object : EndpointDiscoveryCallback() {
         override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
             // An endpoint was found. We request a connection to it.
+
             Nearby.getConnectionsClient(application)
                     .requestConnection("Device A", endpointId, connectionLifecycleCallback)
                     .addOnSuccessListener {
@@ -132,7 +132,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 ConnectionsStatusCodes.STATUS_ERROR -> {
                     Log.d(TAG,"STATUS error")
-                    conn_status.text = "STATUS Error"
+                    conn_status.text = "STATUS Error "
                 }
                 else -> {
                     Log.d(TAG,"STATUS else ")
@@ -171,16 +171,17 @@ class MainActivity : AppCompatActivity() {
 
             // Construct a simple message mapping the ID of the file payload to the desired filename.
             val filenameMessage =
-                filePayload.id.toString() + ":" + uri.lastPathSegment
+                filePayload.id.toString() + ":" + uri.lastPathSegment + ":" +uri.toFile().extension
 
             // Send the filename message as a bytes payload.
             val filenameBytesPayload =
                 Payload.fromBytes(filenameMessage.toByteArray(StandardCharsets.UTF_8))
-            connectionsClient?.sendPayload(opponentEndpointId, filenameBytesPayload)
+            val trailFile = Payload.fromStream(contentResolver.openInputStream(uri)!!)
+            connectionsClient?.sendPayload(opponentEndpointId, trailFile)
 
             // Finally, send the file payload.
             connectionsClient?.sendPayload(opponentEndpointId, filePayload)
-            ReceiveWithProgressCallback(applicationContext).sendPayload(opponentEndpointId,filePayload)
+            ReceiveWithProgressCallback(applicationContext).sendPayload(filePayload)
         }
     }
 
